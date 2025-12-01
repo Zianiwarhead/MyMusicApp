@@ -15,77 +15,88 @@ const FullPlayer: React.FC<FullPlayerProps> = ({ isOpen, onClose, song, isPlayin
   if (!song) return null;
 
   return (
-    <div className={`absolute inset-0 bg-white/95 backdrop-blur-3xl z-40 transition-transform duration-500 ease-out transform ${isOpen ? 'translate-y-0' : 'translate-y-full'} flex flex-col`}>
+    <div className={`absolute inset-0 bg-[#F2F2F7]/95 backdrop-blur-3xl z-[60] transition-all duration-500 cubic-bezier(0.32, 0.72, 0, 1) transform ${isOpen ? 'translate-y-0 opacity-100' : 'translate-y-full opacity-0 pointer-events-none'} flex flex-col items-center justify-center`}>
       
       {/* Close Button */}
-      <div className="absolute top-6 right-8 z-50">
-        <button 
-          onClick={onClose}
-          className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200 transition-colors"
-        >
-          <i className="fas fa-chevron-down text-gray-600"></i>
-        </button>
-      </div>
+      <button 
+        onClick={onClose} 
+        className="absolute top-8 right-8 w-12 h-12 flex items-center justify-center rounded-full bg-gray-200 hover:bg-gray-300 transition-colors"
+      >
+        <i className="fas fa-chevron-down text-gray-600 text-xl"></i>
+      </button>
 
-      <div className="flex-1 flex items-center justify-center p-12 gap-16">
+      <div className="w-full max-w-4xl flex flex-col md:flex-row items-center gap-12 px-8">
           
-          {/* Left: Art (Vinyl Style) */}
-          <div className="w-[450px] h-[450px] flex-shrink-0 relative">
-             <div className="w-full h-full bg-white rounded-2xl shadow-2xl border border-gray-100 flex items-center justify-center relative">
-                 <div className={`w-[90%] h-[90%] rounded-full bg-black relative shadow-xl overflow-hidden ${isPlaying ? 'spinning' : 'spinning paused-spin'}`} style={{ animationDuration: '8s' }}>
-                    <img src={song.artUrl} className="w-full h-full object-cover opacity-90" alt="Vinyl Art" />
-                    <div className="absolute inset-0 rounded-full" style={{ background: 'repeating-radial-gradient(#111 0, #111 2px, transparent 3px, transparent 4px)' }}></div>
+          {/* Vinyl Record */}
+          <div className="flex-1 flex items-center justify-center">
+            <div className="w-[300px] h-[300px] md:w-[450px] md:h-[450px] bg-white rounded-[40px] shadow-2xl flex items-center justify-center relative border border-gray-100">
+                <div 
+                    className={`w-[260px] h-[260px] md:w-[400px] md:h-[400px] rounded-full bg-black relative shadow-2xl overflow-hidden ${isPlaying ? 'spinning' : 'spinning paused-spin'}`} 
+                    style={{ animationDuration: '8s' }}
+                >
+                    <img src={song.artUrl} className="w-full h-full object-cover opacity-80" alt="Vinyl" />
                     <div className="absolute inset-0 flex items-center justify-center">
-                        <div className="w-24 h-24 bg-black rounded-full border-4 border-gray-800 flex items-center justify-center">
-                             <div className="w-4 h-4 bg-white rounded-full"></div>
+                        <div className="w-24 h-24 md:w-32 md:h-32 bg-black rounded-full border-8 border-gray-800 flex items-center justify-center">
+                            <div className="w-4 h-4 bg-white rounded-full"></div>
                         </div>
                     </div>
-                 </div>
-             </div>
+                </div>
+            </div>
           </div>
 
-          {/* Right: Info & Lyrics placeholder */}
-          <div className="w-[400px] flex flex-col justify-center h-[450px]">
-             <div className="mb-8">
-                 <h2 className="text-4xl font-bold text-gray-900 mb-2 leading-tight">{song.title}</h2>
-                 <p className="text-2xl text-rose-500 font-medium">{song.artist}</p>
-             </div>
+          {/* Meta & Controls */}
+          <div className="flex-1 w-full md:max-w-md">
+            <div className="mb-10 text-center md:text-left">
+                <h2 className="text-3xl md:text-4xl font-bold text-gray-900 mb-2">{song.title}</h2>
+                <p className="text-xl text-rose-500 font-medium">{song.artist}</p>
+                <div className="mt-4 flex justify-center md:justify-start gap-2">
+                     <span className="px-3 py-1 bg-gray-200 rounded-full text-xs font-bold text-gray-600">{song.genre || 'Music'}</span>
+                     {song.isLocal && <span className="px-3 py-1 bg-blue-100 rounded-full text-xs font-bold text-blue-600">Local File</span>}
+                </div>
+            </div>
 
-             {/* Fake Lyrics / Next Up */}
-             <div className="flex-1 overflow-hidden relative">
-                 <h3 className="text-xs font-bold text-gray-400 uppercase tracking-widest mb-4">Up Next</h3>
-                 <div className="space-y-4 opacity-60">
-                     <div className="flex items-center gap-4">
-                         <div className="w-10 h-10 bg-gray-200 rounded"></div>
-                         <div className="h-2 w-32 bg-gray-200 rounded"></div>
-                     </div>
-                     <div className="flex items-center gap-4">
-                         <div className="w-10 h-10 bg-gray-200 rounded"></div>
-                         <div className="h-2 w-24 bg-gray-200 rounded"></div>
-                     </div>
-                      <div className="flex items-center gap-4">
-                         <div className="w-10 h-10 bg-gray-200 rounded"></div>
-                         <div className="h-2 w-40 bg-gray-200 rounded"></div>
-                     </div>
-                 </div>
-                 <div className="absolute bottom-0 w-full h-20 bg-gradient-to-t from-white to-transparent"></div>
-             </div>
-             
-             <div className="mt-8 flex gap-4">
-                 <button className="px-6 py-2 bg-gray-100 hover:bg-gray-200 rounded-full text-sm font-semibold transition-colors">Save to Library</button>
-                 <button 
-                    onClick={onShare}
-                    className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 hover:border-gray-400 transition-colors"
-                 >
+            {/* Scrubber */}
+            <div className="w-full mb-8">
+                <div className="h-2 bg-gray-200 rounded-full w-full relative cursor-pointer group">
+                    <div className="absolute inset-y-0 left-0 bg-gray-900 rounded-full group-hover:bg-rose-500 transition-colors" style={{ width: `${progress}%` }}></div>
+                    <div 
+                        className="w-4 h-4 bg-gray-900 rounded-full absolute top-1/2 transform -translate-y-1/2 shadow-lg border-2 border-white scale-0 group-hover:scale-100 transition-transform" 
+                        style={{ left: `${progress}%` }}
+                    ></div>
+                </div>
+                <div className="flex justify-between text-xs text-gray-400 mt-2 font-medium font-mono">
+                    <span>{Math.floor((progress/100)*240 / 60)}:{String(Math.floor((progress/100)*240 % 60)).padStart(2, '0')}</span>
+                    <span>4:00</span>
+                </div>
+            </div>
+
+            {/* Buttons */}
+            <div className="flex justify-center md:justify-between items-center gap-8 md:gap-0">
+                <button className="text-gray-400 hover:text-gray-800 transition-colors"><i className="fas fa-shuffle text-2xl"></i></button>
+                <button className="text-gray-900 hover:text-rose-500 transition-colors"><i className="fas fa-backward-step text-3xl"></i></button>
+                <button 
+                    className="w-20 h-20 bg-gray-900 hover:bg-rose-500 rounded-full flex items-center justify-center shadow-2xl transform active:scale-95 transition-all" 
+                    onClick={onTogglePlay}
+                >
+                    <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play pl-1'} text-white text-3xl`}></i>
+                </button>
+                <button className="text-gray-900 hover:text-rose-500 transition-colors"><i className="fas fa-forward-step text-3xl"></i></button>
+                <button className="text-gray-400 hover:text-gray-800 transition-colors"><i className="fas fa-repeat text-2xl"></i></button>
+            </div>
+            
+            <div className="mt-10 flex justify-center md:justify-start gap-4">
+                 <button className="w-12 h-12 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors" onClick={onShare}>
                      <i className="fas fa-share-nodes"></i>
                  </button>
-                 <button className="w-10 h-10 flex items-center justify-center rounded-full border border-gray-200 hover:border-gray-400 transition-colors">
-                     <i className="fas fa-ellipsis"></i>
+                 <button className="w-12 h-12 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
+                     <i className="fas fa-heart"></i>
                  </button>
-             </div>
+                 <button className="w-12 h-12 rounded-full border border-gray-200 flex items-center justify-center text-gray-500 hover:bg-gray-50 transition-colors">
+                     <i className="fas fa-list-ul"></i>
+                 </button>
+            </div>
           </div>
       </div>
-
     </div>
   );
 };

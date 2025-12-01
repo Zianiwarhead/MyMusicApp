@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Song } from '../types';
 
@@ -13,38 +14,41 @@ const MiniPlayer: React.FC<MiniPlayerProps> = ({ song, isPlaying, onTogglePlay, 
 
   return (
     <div 
-      className="w-[90%] h-16 glass rounded-2xl mb-4 flex items-center px-3 shadow-lg pointer-events-auto cursor-pointer border border-white/40 hover:scale-[1.02] transition-transform duration-300"
+      className="w-full max-w-md h-14 bg-white/90 backdrop-blur-md rounded-xl shadow-[0_8px_30px_rgb(0,0,0,0.12)] flex items-center px-3 border border-white/50 cursor-pointer overflow-hidden mb-2"
       onClick={onClick}
     >
-      <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden relative shadow-inner">
+      <div className="w-10 h-10 rounded-full bg-gray-200 overflow-hidden relative flex-shrink-0">
         <img 
           src={song.artUrl} 
           className={`w-full h-full object-cover ${isPlaying ? 'spinning' : 'spinning paused-spin'}`} 
-          alt="Album Art"
+          alt="Art"
           style={{ animationDuration: '8s' }}
         />
       </div>
       <div className="ml-3 flex-1 min-w-0">
         <h4 className="text-sm font-bold text-gray-900 truncate">{song.title}</h4>
-        <p className="text-xs text-gray-500 truncate">{song.artist}</p>
+        <p className="text-xs text-rose-500 truncate">{song.artist}</p>
       </div>
-      <div className="flex gap-3 pr-2 items-center">
+      <div className="flex gap-2 pr-1 items-center">
         <button 
-          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 active:bg-black/10 transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
           onClick={(e) => {
             e.stopPropagation();
             onTogglePlay();
           }}
         >
-          <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play'} text-gray-900 text-lg`}></i>
+          <i className={`fas ${isPlaying ? 'fa-pause' : 'fa-play pl-0.5'} text-gray-900 text-lg`}></i>
         </button>
         <button 
-          className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-black/5 active:bg-black/10 transition-colors"
+          className="w-9 h-9 flex items-center justify-center rounded-full hover:bg-gray-100 transition-colors"
           onClick={(e) => e.stopPropagation()}
         >
           <i className="fas fa-forward text-gray-400 hover:text-gray-600 transition-colors"></i>
         </button>
       </div>
+      
+      {/* Progress Bar (Visual Only for Mini) */}
+      <div className="absolute bottom-0 left-0 h-0.5 bg-rose-500 opacity-50 w-full" style={{ width: '45%' }}></div>
     </div>
   );
 };

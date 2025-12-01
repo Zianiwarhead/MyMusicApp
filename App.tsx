@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Song, SmartPlaylist, User } from './types';
 import LibraryView from './components/LibraryView';
@@ -6,6 +7,9 @@ import PlayerBar from './components/PlayerBar';
 import FullPlayer from './components/FullPlayer';
 import ShareModal from './components/ShareModal';
 import ProfileModal from './components/ProfileModal';
+import MiniPlayer from './components/MiniPlayer';
+import BottomNav from './components/BottomNav';
+import { saveSongToDB, getSongsFromDB } from './utils/db';
 
 // --- DEMO DATA ---
 
@@ -67,6 +71,87 @@ const App: React.FC = () => {
   const [selectedProfile, setSelectedProfile] = useState<User | null>(null);
   const [isProfileModalOpen, setIsProfileModalOpen] = useState(false);
 
+  // --- SOUND ENGINE ---
+  
+  const playUiSound = (type: 'click' | 'open' | 'close' | 'success') => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+  
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+  
+      const now = ctx.currentTime;
+  
+      if (type === 'click') {
+        // Subtle high tap
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
+        gain.gain.setValueAtTime(0.05, now); // Quiet
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      } else if (type === 'open') {
+        // Soft swell
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.linearRampToValueAtTime(600, now + 0.2);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.05, now + 0.1);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else if (type === 'close') {
+         // Soft decline
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.linearRampToValueAtTime(400, now + 0.15);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (type === 'success') {
+        // Nice chime
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.setValueAtTime(554.37, now + 0.1); // C#
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      }
+    } catch (e) {
+      // Ignore audio context errors (e.g. user hasn't interacted yet)
+    }
+  };
+
+
+  // --- INIT & PERSISTENCE ---
+
+  useEffect(() => {
+    // Load local songs from IndexedDB on startup
+    const loadLocalSongs = async () => {
+      try {
+        const localSongs = await getSongsFromDB();
+        if (localSongs.length > 0) {
+          setAllSongs(prev => {
+            // Avoid duplicates based on ID
+            const existingIds = new Set(prev.map(s => s.id));
+            const uniqueLocal = localSongs.filter(s => !existingIds.has(s.id));
+            return [...prev, ...uniqueLocal];
+          });
+        }
+      } catch (err) {
+        console.error("Failed to load local songs:", err instanceof Error ? err.message : String(err));
+      }
+    };
+    loadLocalSongs();
+  }, []);
 
   // --- SMART LOGIC ---
 
@@ -132,14 +217,29 @@ const App: React.FC = () => {
 
 
   // --- HANDLERS ---
+  
+  // Helper to generate offline-safe avatar/art
+  const generateOfflineArt = (seed: string) => {
+    // Simple SVG data URI generation for offline support
+    const colors = ['#f43f5e', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#d946ef'];
+    const bg = colors[seed.length % colors.length];
+    const svg = `
+      <svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" fill="${bg}"/>
+        <text x="50" y="50" font-family="sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle" dy=".35em">${seed.charAt(0).toUpperCase()}</text>
+      </svg>
+    `;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files) return;
 
     const newSongs: Song[] = [];
+    const fileArray = Array.from(files);
     
-    Array.from(files).forEach((file) => {
+    for (const file of fileArray) {
       const name = file.name.toLowerCase();
       let detectedGenre = 'Pop'; 
       
@@ -149,57 +249,83 @@ const App: React.FC = () => {
       else if (name.includes('rap') || name.includes('hip')) detectedGenre = 'Hip-Hop';
       else if (name.includes('electronic') || name.includes('dance')) detectedGenre = 'Electronic';
 
-      newSongs.push({
+      // Use generated offline art instead of remote API
+      const offlineArt = generateOfflineArt(file.name);
+
+      const newSong: Song = {
         id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
         title: file.name.replace(/\.[^/.]+$/, ""),
         artist: 'Local Artist', 
-        artUrl: `https://api.dicebear.com/7.x/identicon/svg?seed=${file.name}`,
+        artUrl: offlineArt,
         genre: detectedGenre,
         fileUrl: URL.createObjectURL(file), 
         isLocal: true,
-      });
-    });
+      };
+
+      // Save to IndexedDB
+      try {
+        await saveSongToDB(newSong, file);
+        newSongs.push(newSong);
+      } catch (e) {
+        console.error("Failed to save song to DB:", e instanceof Error ? e.message : String(e));
+        // Push even if DB save fails so it works for current session
+        newSongs.push(newSong);
+      }
+    }
 
     setAllSongs(prev => [...prev, ...newSongs]);
+    playUiSound('success');
   };
 
   // --- PLAYBACK LOGIC ---
 
-  // 1. Manage Audio Source
+  // 1. Handle Song Change & Source Loading
   useEffect(() => {
-      if (currentSong) {
-          if (currentSong.fileUrl && audioRef.current) {
-              // Real File Playback
-              audioRef.current.src = currentSong.fileUrl;
-              audioRef.current.load();
-              if (isPlaying) {
-                  audioRef.current.play().catch(e => {
-                      console.error("Autoplay prevented:", e);
-                      setIsPlaying(false);
-                  });
-              }
-          } else if (audioRef.current) {
-              // Demo Simulation
-              audioRef.current.pause();
-              audioRef.current.src = "";
-          }
-      }
-  }, [currentSong]);
+    const audio = audioRef.current;
+    if (!currentSong || !audio) return;
 
-  // 2. Manage Play/Pause State
+    if (currentSong.fileUrl) {
+       // Only update source if it has changed to prevent reloading issues
+       if (audio.src !== currentSong.fileUrl) {
+           audio.src = currentSong.fileUrl;
+           audio.load();
+           if (isPlaying) {
+               audio.play().catch(e => {
+                   // Ignore AbortError which happens if user skips tracks quickly
+                   if (e.name !== 'AbortError') {
+                       console.error("Autoplay prevented:", e.message);
+                   }
+               });
+           }
+       }
+    } else {
+       // Demo mode (no file)
+       audio.pause();
+       audio.src = "";
+    }
+  }, [currentSong]); // Only run when the specific song object changes
+
+  // 2. Handle Play/Pause Toggle
   useEffect(() => {
-      if (audioRef.current && currentSong?.fileUrl) {
-          if (isPlaying) {
-              audioRef.current.play().catch(e => console.error("Playback error:", e));
-          } else {
-              audioRef.current.pause();
-          }
-      }
-  }, [isPlaying, currentSong]);
+    const audio = audioRef.current;
+    if (!audio || !currentSong?.fileUrl) return;
+
+    if (isPlaying) {
+        if (audio.paused) {
+            audio.play().catch(e => {
+                if (e.name !== 'AbortError') console.error("Play error:", e.message);
+            });
+        }
+    } else {
+        if (!audio.paused) {
+            audio.pause();
+        }
+    }
+  }, [isPlaying]);
 
   // 3. Simulation Loop (Only for demo songs without files)
   useEffect(() => {
-    let interval: NodeJS.Timeout;
+    let interval: ReturnType<typeof setInterval>;
     
     // Only run simulation if we DON'T have a real file
     if (isPlaying && !currentSong?.fileUrl) {
@@ -232,6 +358,7 @@ const App: React.FC = () => {
   };
 
   const handlePlaySong = (song: Song) => {
+    playUiSound('click');
     if (currentSong?.id === song.id) {
       togglePlay();
     } else {
@@ -249,28 +376,33 @@ const App: React.FC = () => {
   };
 
   const togglePlay = () => {
+    playUiSound('click');
     setIsPlaying(!isPlaying);
   };
 
   // --- SOCIAL HANDLERS ---
 
   const handleOpenShare = (song: Song) => {
+    playUiSound('open');
     setSongToShare(song);
     setShareModalMode('share_song');
     setIsShareModalOpen(true);
   };
 
   const handleOpenInvite = () => {
+    playUiSound('open');
     setShareModalMode('invite_friends');
     setIsShareModalOpen(true);
   };
 
   const handleSelectUser = (user: User) => {
+      playUiSound('open');
       setSelectedProfile(user);
       setIsProfileModalOpen(true);
   };
 
   const handleFollowToggle = (userId: string) => {
+      playUiSound('click');
       setFriends(prev => prev.map(u => 
           u.id === userId ? { ...u, isFollowing: !u.isFollowing } : u
       ));
@@ -278,32 +410,36 @@ const App: React.FC = () => {
 
 
   return (
-    <div className="flex h-screen w-screen bg-[#f3f4f6] overflow-hidden relative">
+    <div className="w-full h-full relative text-black font-sans overflow-hidden bg-[#F2F2F7] flex flex-col md:flex-row">
       
       {/* HIDDEN AUDIO ELEMENT FOR REAL PLAYBACK */}
       <audio 
           ref={audioRef}
           onTimeUpdate={handleAudioTimeUpdate}
           onEnded={handleSongEnd}
-          onError={(e) => console.error("Audio playback error", e)}
+          onError={(e) => console.error("Audio playback error:", e.currentTarget.error?.message)}
       />
 
-      {/* ATMOSPHERIC BACKGROUND */}
-      <div className="blob-container">
-          <div className="blob blob-1"></div>
-          <div className="blob blob-2"></div>
-          <div className="blob blob-3"></div>
+      {/* --- DESKTOP SIDEBAR (Hidden on Mobile) --- */}
+      <div className="hidden md:flex h-full">
+        <Sidebar 
+          smartPlaylists={smartPlaylists}
+          friends={friends}
+          onInvite={handleOpenInvite}
+          onSelectUser={handleSelectUser}
+        />
       </div>
 
-      <Sidebar 
-        smartPlaylists={smartPlaylists} 
-        friends={friends}
-        onInvite={handleOpenInvite}
-        onSelectUser={handleSelectUser}
-      />
+      {/* Main Content Area */}
+      <div className="flex-1 flex flex-col h-full relative min-w-0 bg-white/50 z-0">
+          
+          {/* Background Blobs */}
+          <div className="blob-container opacity-50 pointer-events-none">
+              <div className="blob blob-1"></div>
+              <div className="blob blob-2"></div>
+          </div>
 
-      <div className="flex flex-col flex-1 relative min-w-0 z-10 glass rounded-l-[40px] my-2 mr-2 shadow-2xl overflow-hidden border border-white/50">
-          <div className="flex-1 relative overflow-hidden bg-white/50">
+          <div className="flex-1 overflow-y-auto no-scrollbar relative z-10 pt-4 px-4 md:pt-8 md:px-8 pb-32">
               <LibraryView 
                 allSongs={allSongs} 
                 recommendations={recommendations}
@@ -314,44 +450,80 @@ const App: React.FC = () => {
                 onUpload={handleFileUpload}
                 onShare={handleOpenShare}
               />
-              
-              <FullPlayer 
-                  isOpen={isFullPlayerOpen}
-                  onClose={() => setIsFullPlayerOpen(false)}
-                  song={currentSong}
-                  isPlaying={isPlaying}
-                  onTogglePlay={togglePlay}
-                  progress={progress}
-                  onShare={() => currentSong && handleOpenShare(currentSong)}
-              />
-              
-              <ShareModal 
-                isOpen={isShareModalOpen}
-                onClose={() => setIsShareModalOpen(false)}
-                song={songToShare}
-                mode={shareModalMode}
-              />
-
-              <ProfileModal
-                isOpen={isProfileModalOpen}
-                onClose={() => setIsProfileModalOpen(false)}
-                user={selectedProfile}
-                onFollowToggle={handleFollowToggle}
-                onPlayPlaylist={(pl) => {
-                    handlePlayPlaylist(pl);
-                    setIsProfileModalOpen(false);
-                }}
-              />
           </div>
 
-          <PlayerBar 
-             song={currentSong}
-             isPlaying={isPlaying}
-             onTogglePlay={togglePlay}
-             progress={progress}
-             onOpenFullPlayer={() => currentSong && setIsFullPlayerOpen(true)}
-          />
+          {/* --- MOBILE: FLOATING MINI PLAYER --- */}
+          {/* Positioned above BottomNav */}
+          <div className="md:hidden fixed bottom-20 left-0 w-full z-50 px-4 flex justify-center">
+             <MiniPlayer 
+                song={currentSong}
+                isPlaying={isPlaying}
+                onTogglePlay={togglePlay}
+                onClick={() => {
+                  playUiSound('open');
+                  setIsFullPlayerOpen(true);
+                }}
+             />
+          </div>
+
+          {/* --- MOBILE: BOTTOM NAV --- */}
+          <div className="md:hidden fixed bottom-0 w-full z-50">
+             <BottomNav />
+          </div>
+
       </div>
+
+      {/* --- DESKTOP: PLAYER BAR (Hidden on Mobile) --- */}
+      <div className="hidden md:flex absolute bottom-0 w-full z-50">
+        <PlayerBar 
+          song={currentSong} 
+          isPlaying={isPlaying} 
+          onTogglePlay={togglePlay} 
+          progress={progress}
+          onOpenFullPlayer={() => {
+            playUiSound('open');
+            setIsFullPlayerOpen(true);
+          }}
+        />
+      </div>
+
+      {/* Modals & Overlays */}
+      <FullPlayer 
+          isOpen={isFullPlayerOpen}
+          onClose={() => {
+            playUiSound('close');
+            setIsFullPlayerOpen(false);
+          }}
+          song={currentSong}
+          isPlaying={isPlaying}
+          onTogglePlay={togglePlay}
+          progress={progress}
+          onShare={() => currentSong && handleOpenShare(currentSong)}
+      />
+      
+      <ShareModal 
+        isOpen={isShareModalOpen}
+        onClose={() => {
+          playUiSound('close');
+          setIsShareModalOpen(false);
+        }}
+        song={songToShare}
+        mode={shareModalMode}
+      />
+
+      <ProfileModal
+        isOpen={isProfileModalOpen}
+        onClose={() => {
+          playUiSound('close');
+          setIsProfileModalOpen(false);
+        }}
+        user={selectedProfile}
+        onFollowToggle={handleFollowToggle}
+        onPlayPlaylist={(pl) => {
+            handlePlayPlaylist(pl);
+            setIsProfileModalOpen(false);
+        }}
+      />
     </div>
   );
 };

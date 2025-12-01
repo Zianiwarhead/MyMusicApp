@@ -10,10 +10,25 @@
         /* iOS-like Smoothness */
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            background-color: #f3f4f6;
+            background-color: #e5e5e5;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
             margin: 0;
             overflow: hidden;
             -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Desktop Container */
+        #root {
+            width: 100%;
+            height: 100%;
+            background-color: #F2F2F7;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
 
         /* Hide Scrollbar */
@@ -25,9 +40,9 @@
             scrollbar-width: none;
         }
 
-        /* Glassmorphism */
+        /* Glassmorphism Classes */
         .glass {
-            background: rgba(255, 255, 255, 0.65);
+            background: rgba(255, 255, 255, 0.75);
             backdrop-filter: blur(20px);
             -webkit-backdrop-filter: blur(20px);
             border-top: 1px solid rgba(255, 255, 255, 0.3);
@@ -45,14 +60,6 @@
             animation-play-state: paused;
         }
 
-        .slide-up {
-            transition: transform 0.4s cubic-bezier(0.32, 0.72, 0, 1);
-            transform: translateY(100%);
-        }
-        .slide-up-active {
-            transform: translateY(0);
-        }
-
         /* Atmospheric Blobs */
         .blob-container {
             position: absolute;
@@ -64,61 +71,29 @@
             z-index: 0;
             pointer-events: none;
         }
-
         .blob {
             position: absolute;
+            filter: blur(60px);
+            opacity: 0.5;
+            z-index: 0;
             border-radius: 50%;
-            filter: blur(80px);
-            opacity: 0.6;
         }
-
         .blob-1 {
-            top: -10%;
-            left: -10%;
-            width: 500px;
-            height: 500px;
-            background: #ffcdd2; /* Rose */
-            animation: float1 25s infinite alternate;
+             background-color: #fb923c; /* orange-400 */
+             width: 20vw; height: 20vw;
+             top: -5vw; left: -5vw;
+             animation: float1 10s ease-in-out infinite alternate;
         }
-
         .blob-2 {
-            bottom: -10%;
-            right: -10%;
-            width: 600px;
-            height: 600px;
-            background: #bbdefb; /* Blue */
-            animation: float2 20s infinite alternate;
-        }
-
-        .blob-3 {
-            bottom: 20%;
-            left: 20%;
-            width: 400px;
-            height: 400px;
-            background: #e1bee7; /* Purple */
-            animation: float3 22s infinite alternate;
-            opacity: 0.4;
-        }
-
-        @keyframes float1 {
-            0% { transform: translate(0, 0) scale(1); }
-            33% { transform: translate(30px, 50px) scale(1.1); }
-            66% { transform: translate(-20px, 20px) scale(0.9); }
-            100% { transform: translate(0, 0) scale(1); }
-        }
-
-        @keyframes float2 {
-            0% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(-50px, -20px) scale(1.1); }
-            100% { transform: translate(0, 0) scale(1); }
-        }
-
-        @keyframes float3 {
-            0% { transform: translate(0, 0) scale(1); }
-            50% { transform: translate(40px, -40px) scale(1.2); }
-            100% { transform: translate(0, 0) scale(1); }
+             background-color: #93c5fd; /* blue-300 */
+             width: 25vw; height: 25vw;
+             bottom: -5vw; right: -5vw;
+             animation: float2 12s ease-in-out infinite alternate;
         }
         
+        @keyframes float1 { from { transform: translate(0,0); } to { transform: translate(20px, 40px); } }
+        @keyframes float2 { from { transform: translate(0,0); } to { transform: translate(-30px, 20px); } }
+
         @keyframes fade-in {
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }

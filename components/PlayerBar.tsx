@@ -1,3 +1,4 @@
+
 import React from 'react';
 import { Song } from '../types';
 
@@ -11,7 +12,7 @@ interface PlayerBarProps {
 
 const PlayerBar: React.FC<PlayerBarProps> = ({ song, isPlaying, onTogglePlay, progress, onOpenFullPlayer }) => {
   return (
-    <div className="h-24 bg-white/80 backdrop-blur-xl border-t border-gray-200 flex items-center px-6 justify-between z-50 flex-shrink-0 select-none">
+    <div className="w-full h-24 bg-white/90 backdrop-blur-xl border-t border-gray-200 flex items-center px-6 justify-between select-none">
         
         {/* Left: Song Info */}
         <div className="flex items-center w-1/3 gap-4 min-w-0 pr-4">
