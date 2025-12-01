@@ -11,8 +11,6 @@ export interface Song {
   lyrics?: string;
   radioUrl?: string;
   isLiked?: boolean;
-  lastPlayed?: number; // Timestamp
-  duration?: number;
 }
 
 export interface PlaybackState {

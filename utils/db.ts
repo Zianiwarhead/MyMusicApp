@@ -40,8 +40,7 @@ export const saveSongToDB = async (song: Song, file: File): Promise<void> => {
         genre: song.genre,
         isLocal: song.isLocal,
         isLiked: song.isLiked || false,
-        fileBlob: file, // Store the file/blob directly
-        duration: song.duration
+        fileBlob: file // Store the file/blob directly
     };
 
     const request = store.put(storedSong);
@@ -72,8 +71,7 @@ export const updateSongInDB = async (song: Song): Promise<void> => {
                     genre: song.genre,
                     isLocal: song.isLocal,
                     isLiked: song.isLiked,
-                    fileBlob: result.fileBlob,
-                    duration: song.duration
+                    fileBlob: result.fileBlob
                 };
                 store.put(storedSong);
                 resolve();
@@ -107,8 +105,7 @@ export const getSongsFromDB = async (): Promise<Song[]> => {
         genre: item.genre,
         isLocal: true,
         isLiked: item.isLiked || false,
-        fileUrl: URL.createObjectURL(item.fileBlob),
-        duration: item.duration
+        fileUrl: URL.createObjectURL(item.fileBlob)
       }));
       resolve(songs);
     };

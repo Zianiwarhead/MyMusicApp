@@ -1,63 +1,70 @@
+
 import React from 'react';
 
 interface SidebarProps {
-    onToggleTheme?: () => void;
-    isDarkMode?: boolean;
+    onTabChange?: (tab: string) => void;
+    activeTab?: string;
+    isDarkMode: boolean;
+    onToggleTheme: () => void;
 }
 
-const Sidebar: React.FC<SidebarProps> = ({ onToggleTheme, isDarkMode }) => {
+const Sidebar: React.FC<SidebarProps> = ({ onTabChange, activeTab, isDarkMode, onToggleTheme }) => {
   return (
-    <div className="w-64 h-full bg-[#f8f8fa]/90 dark:bg-[#18181b]/95 backdrop-blur-xl flex flex-col border-r border-gray-200 dark:border-white/5 transition-colors duration-300 z-40">
-      
-      {/* Header */}
-      <div className="p-6 flex-shrink-0">
-         <div className="flex items-center justify-between mb-8">
-             <div className="flex items-center gap-2 text-rose-500 cursor-pointer select-none">
-                <div className="w-8 h-8 bg-gradient-to-br from-rose-500 to-orange-400 rounded-lg flex items-center justify-center shadow-lg text-white">
-                    <i className="fas fa-music text-sm"></i>
-                </div>
-                <span className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Vibe</span>
-             </div>
-             
-             {/* Theme Toggle - Visible Here */}
-             <button 
-                onClick={onToggleTheme}
-                className="w-8 h-8 rounded-full bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-white flex items-center justify-center hover:bg-gray-300 dark:hover:bg-white/20 transition-colors"
-                title={isDarkMode ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-                <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-indigo-500'}`}></i>
-            </button>
+    <div className="w-64 h-full bg-[#f8f8fa]/90 dark:bg-[#18181b]/90 backdrop-blur-xl flex flex-col border-r border-gray-200 dark:border-white/10 z-20 flex-shrink-0 relative transition-colors duration-300">
+      <div className="p-6">
+         <div className="flex items-center gap-2 mb-8 text-rose-500 cursor-pointer select-none">
+            <div className="w-8 h-8 bg-gradient-to-br from-rose-500 to-orange-400 rounded-lg flex items-center justify-center shadow-lg text-white">
+                <i className="fas fa-music text-sm"></i>
+            </div>
+            <span className="text-xl font-bold text-gray-900 dark:text-white tracking-tight">Vibe</span>
          </div>
          
          <div className="space-y-1">
-            <NavItem icon="fa-house" label="Home" active />
-            <NavItem icon="fa-compass" label="Discover" />
-            <NavItem icon="fa-broadcast-tower" label="Radio" />
+            <NavItem 
+                icon="fa-house" 
+                label="Home" 
+                active={activeTab === 'All'} 
+                onClick={() => onTabChange && onTabChange('All')}
+            />
+            <NavItem 
+                icon="fa-broadcast-tower" 
+                label="Radio" 
+                active={activeTab === 'Radio'} 
+                onClick={() => onTabChange && onTabChange('Radio')}
+            />
          </div>
       </div>
       
-      {/* Content Area */}
-      <div className="flex-1 overflow-y-auto no-scrollbar px-6 min-h-0 pb-32">
-          <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 px-3">Library</h3>
+      <div className="p-6 pt-0 flex-1">
+          <h3 className="text-xs font-bold text-gray-400 dark:text-gray-500 uppercase tracking-wider mb-3 px-3">Library</h3>
            <div className="space-y-1">
-            <NavItem icon="fa-clock" label="Recent" />
-            <NavItem icon="fa-heart" label="Favorites" />
-            <NavItem icon="fa-folder" label="Local Files" />
-            <NavItem icon="fa-gear" label="Settings" />
+            <NavItem icon="fa-heart" label="Favorites" active={activeTab === 'Favorites'} onClick={() => onTabChange && onTabChange('Favorites')} />
+            <NavItem icon="fa-folder" label="Local Files" active={activeTab === 'Local'} onClick={() => onTabChange && onTabChange('Local')} />
          </div>
       </div>
-      
-      {/* Footer Removed - No more covered button */}
+
+      <div className="p-6 border-t border-gray-200 dark:border-white/10">
+        <button 
+            onClick={onToggleTheme}
+            className="w-full py-3 rounded-xl bg-gray-200 dark:bg-white/10 text-gray-900 dark:text-white font-medium text-sm flex items-center justify-center gap-2 hover:scale-105 active:scale-95 transition-all"
+        >
+            <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-indigo-500'}`}></i>
+            {isDarkMode ? 'Light Mode' : 'Dark Mode'}
+        </button>
+      </div>
     </div>
   );
 };
 
-const NavItem = ({ icon, label, active = false }: { icon: string, label: string, active?: boolean }) => (
-    <div className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors group ${active ? 'bg-gray-200/80 dark:bg-white/10 text-rose-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-white/5'}`}>
+const NavItem = ({ icon, label, active = false, onClick }: { icon: string, label: string, active?: boolean, onClick?: () => void }) => (
+    <div 
+        className={`flex items-center gap-3 px-3 py-2 rounded-lg cursor-pointer transition-colors group ${active ? 'bg-gray-200/80 dark:bg-white/10 text-rose-500' : 'text-gray-600 dark:text-gray-400 hover:bg-gray-200/50 dark:hover:bg-white/5'}`}
+        onClick={onClick}
+    >
         <div className="w-5 flex justify-center">
              <i className={`fas ${icon} ${active ? 'text-rose-500' : 'text-gray-400 dark:text-gray-500 group-hover:text-gray-600 dark:group-hover:text-gray-300'}`}></i>
         </div>
-        <span className="text-sm font-medium truncate">{label}</span>
+        <span className={`text-sm font-medium ${active ? 'font-semibold' : ''} truncate`}>{label}</span>
     </div>
 );
 

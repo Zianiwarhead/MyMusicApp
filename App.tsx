@@ -1,456 +1,645 @@
-import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { Song } from './types';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { Song, PlaybackMode } from './types';
 import LibraryView from './components/LibraryView';
 import Sidebar from './components/Sidebar';
 import PlayerBar from './components/PlayerBar';
 import FullPlayer from './components/FullPlayer';
-import EditModal from './components/EditModal';
+import ShareModal from './components/ShareModal';
 import MiniPlayer from './components/MiniPlayer';
 import BottomNav from './components/BottomNav';
-import { saveSongToDB, getSongsFromDB, updateSongInDB } from './utils/db';
-import * as mm from 'music-metadata-browser';
+import EditModal from './components/EditModal';
+import { saveSongToDB, getSongsFromDB, deleteSongFromDB, updateSongInDB } from './utils/db';
+
+// --- DEMO DATA ---
 
 const INITIAL_SONGS: Song[] = [
   { id: '1', title: 'Flower Boy', artist: 'Tyler, The Creator', genre: 'Hip-Hop', artUrl: 'https://upload.wikimedia.org/wikipedia/en/c/c3/Tyler%2C_the_Creator_-_Flower_Boy.png' },
   { id: '2', title: 'Currents', artist: 'Tame Impala', genre: 'Psychedelic Rock', artUrl: 'https://upload.wikimedia.org/wikipedia/en/9/9b/Tame_Impala_-_Currents.png' },
   { id: '3', title: 'Starboy', artist: 'The Weeknd', genre: 'R&B', artUrl: 'https://upload.wikimedia.org/wikipedia/en/3/39/The_Weeknd_-_Starboy.png' },
+  { id: '4', title: 'After Hours', artist: 'The Weeknd', genre: 'R&B', artUrl: 'https://upload.wikimedia.org/wikipedia/en/c/c1/The_Weeknd_-_After_Hours.png' },
+  { id: '5', title: 'Random Access Memories', artist: 'Daft Punk', genre: 'Electronic', artUrl: 'https://upload.wikimedia.org/wikipedia/en/a/a7/Random_Access_Memories.jpg' },
 ];
 
 const App: React.FC = () => {
-  // --- STATE ---
+  // Data State
   const [allSongs, setAllSongs] = useState<Song[]>(INITIAL_SONGS);
-  const [isDarkMode, setIsDarkMode] = useState(false);
+  const [listeningHistory, setListeningHistory] = useState<string[]>([]);
+  const [radioStations, setRadioStations] = useState<Song[]>([]);
+  const [activeTab, setActiveTab] = useState('All');
   
-  // Audio State
+  // Radio State
+  const [radioGenre, setRadioGenre] = useState('lofi');
+
+  // Theme State
+  const [isDarkMode, setIsDarkMode] = useState(false);
+
+  // Playback State
   const [currentSong, setCurrentSong] = useState<Song | null>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isFullPlayerOpen, setIsFullPlayerOpen] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const [volume, setVolume] = useState(1);
-  const [isShuffle, setIsShuffle] = useState(false);
-  const [repeatMode, setRepeatMode] = useState<'off' | 'all' | 'one'>('off');
-  const [playbackMode, setPlaybackMode] = useState<'normal' | 'repeat_one' | 'repeat_list' | 'shuffle'>('normal');
+  const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [isFullPlayerOpen, setIsFullPlayerOpen] = useState<boolean>(false);
+  const [progress, setProgress] = useState(0); // 0 to 100 percentage
+  const [duration, setDuration] = useState(0); // in seconds
+  const [currentTime, setCurrentTime] = useState(0); // in seconds
+  const [playbackMode, setPlaybackMode] = useState<PlaybackMode>('normal');
   const [lyrics, setLyrics] = useState<string | null>(null);
 
-  // UI State
-  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false);
-  
+  // Audio Reference
   const audioRef = useRef<HTMLAudioElement>(null);
-  
-  // Web Audio API for Visualizer
   const audioContextRef = useRef<AudioContext | null>(null);
-  const sourceNodeRef = useRef<MediaElementAudioSourceNode | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
-  const [analyser, setAnalyser] = useState<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaElementAudioSourceNode | null>(null);
 
-  // --- INIT ---
+  // UI State
+  const [isShareModalOpen, setIsShareModalOpen] = useState(false);
+  const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [songToShare, setSongToShare] = useState<Song | null>(null);
+  const [songToEdit, setSongToEdit] = useState<Song | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+
+  // --- SOUND ENGINE ---
+  
+  const playUiSound = (type: 'click' | 'open' | 'close' | 'success') => {
+    try {
+      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContext) return;
+      const ctx = new AudioContext();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      const now = ctx.currentTime;
+  
+      if (type === 'click') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(800, now);
+        osc.frequency.exponentialRampToValueAtTime(400, now + 0.05);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+        osc.start(now);
+        osc.stop(now + 0.05);
+      } else if (type === 'open') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(400, now);
+        osc.frequency.linearRampToValueAtTime(600, now + 0.2);
+        gain.gain.setValueAtTime(0, now);
+        gain.gain.linearRampToValueAtTime(0.05, now + 0.1);
+        gain.gain.linearRampToValueAtTime(0, now + 0.2);
+        osc.start(now);
+        osc.stop(now + 0.2);
+      } else if (type === 'close') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.linearRampToValueAtTime(400, now + 0.15);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.15);
+        osc.start(now);
+        osc.stop(now + 0.15);
+      } else if (type === 'success') {
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(440, now);
+        osc.frequency.setValueAtTime(554.37, now + 0.1);
+        gain.gain.setValueAtTime(0.05, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.3);
+        osc.start(now);
+        osc.stop(now + 0.3);
+      }
+    } catch (e) {}
+  };
+
+  // --- INIT & PERSISTENCE ---
+
   useEffect(() => {
-    // 1. Dark Mode System Check
+    // Detect System Theme
     if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
         setIsDarkMode(true);
         document.documentElement.classList.add('dark');
     }
 
-    // 2. Load DB
-    getSongsFromDB().then(localSongs => {
+    const loadLocalSongs = async () => {
+      try {
+        const localSongs = await getSongsFromDB();
         if (localSongs.length > 0) {
-            setAllSongs(prev => {
-                const ids = new Set(prev.map(s => s.id));
-                return [...prev, ...localSongs.filter(s => !ids.has(s.id))];
-            });
+          setAllSongs(prev => {
+            const existingIds = new Set(prev.map(s => s.id));
+            const uniqueLocal = localSongs.filter(s => !existingIds.has(s.id));
+            return [...prev, ...uniqueLocal];
+          });
         }
-    });
+      } catch (err) {
+        console.error("Failed to load local songs:", err);
+      }
+    };
+    loadLocalSongs();
   }, []);
 
-  // --- RECOMMENDATION ENGINE (ARCHEOLOGIST) ---
-  const recommendations = useMemo(() => {
-      if (allSongs.length === 0) return [];
-      
-      // 1. Identify favorite genre based on play history (simulated by what's present)
-      const genreCounts: Record<string, number> = {};
-      allSongs.forEach(s => {
-          if (s.lastPlayed) {
-              genreCounts[s.genre] = (genreCounts[s.genre] || 0) + 2; // Weight played songs higher
-          }
-          genreCounts[s.genre] = (genreCounts[s.genre] || 0) + 1;
-      });
-      
-      const sortedGenres = Object.keys(genreCounts).sort((a,b) => genreCounts[b] - genreCounts[a]);
-      const topGenre = sortedGenres[0] || 'Pop';
+  // Fetch Radio when Genre Changes
+  useEffect(() => {
+     fetchRadioStations(radioGenre);
+  }, [radioGenre]);
 
-      // 2. Find "Forgotten Gems" (Songs in top genres not played recently)
-      // Since we don't have persistent history yet, we'll pick songs not currently playing
-      const now = Date.now();
-      const candidates = allSongs.filter(s => 
-          s.genre === topGenre && 
-          s.id !== currentSong?.id &&
-          (!s.lastPlayed || now - s.lastPlayed > 24 * 60 * 60 * 1000) // Not played in last 24h
-      );
-
-      // Shuffle
-      return candidates.sort(() => 0.5 - Math.random()).slice(0, 5);
-  }, [allSongs, currentSong]);
-
-  // --- AUDIO LOGIC ---
-  
-  // Initialize Web Audio API
-  const initAudioContext = () => {
-    if (!audioRef.current || audioContextRef.current) return;
-
-    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
-    const ctx = new AudioContextClass();
-    const analyserNode = ctx.createAnalyser();
-    analyserNode.fftSize = 256;
-    
-    // Create source from the audio element
-    // Note: This requires CORS to be handled for remote files, usually fine for local blob/data URLs
-    const source = ctx.createMediaElementSource(audioRef.current);
-    source.connect(analyserNode);
-    analyserNode.connect(ctx.destination);
-
-    audioContextRef.current = ctx;
-    sourceNodeRef.current = source;
-    analyserRef.current = analyserNode;
-    setAnalyser(analyserNode);
+  const fetchRadioStations = async (genre: string) => {
+      try {
+          const response = await fetch(`https://de1.api.radio-browser.info/json/stations/bytag/${genre}?limit=15&order=votes&reverse=true`);
+          const data = await response.json();
+          const stations: Song[] = data.map((station: any) => ({
+              id: station.stationuuid,
+              title: station.name,
+              artist: 'Live Radio',
+              genre: genre.charAt(0).toUpperCase() + genre.slice(1),
+              artUrl: station.favicon || 'https://cdn-icons-png.flaticon.com/512/3075/3075836.png',
+              fileUrl: station.url_resolved,
+              isRadio: true
+          }));
+          setRadioStations(stations);
+      } catch (e) {
+          console.error("Failed to fetch radio", e);
+      }
   };
 
-  const togglePlay = async () => {
-      if (!audioContextRef.current && audioRef.current) {
-          initAudioContext();
+  const fetchLyrics = async (title: string, artist: string) => {
+      setLyrics(null);
+      try {
+          const res = await fetch(`https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`);
+          if (res.ok) {
+              const data = await res.json();
+              if (data.plainLyrics) setLyrics(data.plainLyrics);
+              else if (data.syncedLyrics) setLyrics(data.syncedLyrics);
+          }
+      } catch (e) {
+          console.log("Lyrics not found");
       }
-      if (audioContextRef.current?.state === 'suspended') {
-          await audioContextRef.current.resume();
-      }
-      setIsPlaying(!isPlaying);
   };
 
   const toggleTheme = () => {
       const newMode = !isDarkMode;
       setIsDarkMode(newMode);
-      if (newMode) document.documentElement.classList.add('dark');
-      else document.documentElement.classList.remove('dark');
+      if (newMode) {
+          document.documentElement.classList.add('dark');
+      } else {
+          document.documentElement.classList.remove('dark');
+      }
+      playUiSound('click');
   };
 
-  const handleTimeUpdate = () => {
-      if (audioRef.current) {
-          setCurrentTime(audioRef.current.currentTime);
+  // --- AUDIO CONTEXT SETUP ---
+  useEffect(() => {
+      if (isPlaying && !audioContextRef.current && audioRef.current) {
+          try {
+              const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
+              const ctx = new AudioContext();
+              const analyser = ctx.createAnalyser();
+              analyser.fftSize = 256;
+              if (!sourceRef.current) {
+                const source = ctx.createMediaElementSource(audioRef.current);
+                source.connect(analyser);
+                analyser.connect(ctx.destination);
+                sourceRef.current = source;
+              }
+              audioContextRef.current = ctx;
+              analyserRef.current = analyser;
+          } catch (e) {
+              console.error("Web Audio API error", e);
+          }
+      }
+  }, [isPlaying]);
+
+  // --- RECOMMENDATIONS ---
+  const recommendations: Song[] = useMemo(() => {
+    if (allSongs.length < 3) return [];
+    const genreCounts: Record<string, number> = {};
+    listeningHistory.forEach(g => genreCounts[g] = (genreCounts[g] || 0) + 1);
+    const topGenre = Object.entries(genreCounts).sort(([,a], [,b]) => b - a)[0]?.[0] || 'Pop';
+    const localCandidates = allSongs.filter(s => s.genre === topGenre && s.id !== currentSong?.id);
+    const pool = localCandidates.length > 0 ? localCandidates : allSongs;
+    return pool.sort(() => 0.5 - Math.random()).slice(0, 6);
+  }, [allSongs, listeningHistory, currentSong]);
+
+
+  // --- HANDLERS ---
+  
+  const generateOfflineArt = (seed: string) => {
+    const colors = ['#f43f5e', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#8b5cf6', '#d946ef'];
+    const bg = colors[seed.length % colors.length];
+    const svg = `
+      <svg width="100" height="100" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+        <rect width="100" height="100" fill="${bg}"/>
+        <text x="50" y="50" font-family="sans-serif" font-size="50" font-weight="bold" fill="white" text-anchor="middle" dy=".35em">${seed.charAt(0).toUpperCase()}</text>
+      </svg>
+    `;
+    return `data:image/svg+xml;base64,${btoa(svg)}`;
+  };
+
+  const processFiles = async (fileList: FileList | null) => {
+    if (!fileList) return;
+    const newSongs: Song[] = [];
+    const fileArray = Array.from(fileList);
+    
+    for (const file of fileArray) {
+      if (!file.type.startsWith('audio/')) continue;
+
+      const nameParts = file.name.replace(/\.[^/.]+$/, "").split('-');
+      let title = nameParts.length > 1 ? nameParts[1].trim() : nameParts[0].trim();
+      let artist = nameParts.length > 1 ? nameParts[0].trim() : 'Local Artist';
+      
+      const name = file.name.toLowerCase();
+      let detectedGenre = 'Pop'; 
+      if (name.includes('lofi')) detectedGenre = 'Lo-Fi';
+      else if (name.includes('phonk')) detectedGenre = 'Phonk';
+      else if (name.includes('rock')) detectedGenre = 'Rock';
+      else if (name.includes('hip')) detectedGenre = 'Hip-Hop';
+      else if (name.includes('electronic')) detectedGenre = 'Electronic';
+
+      const offlineArt = generateOfflineArt(title);
+      const newSong: Song = {
+        id: `local_${Date.now()}_${Math.random().toString(36).substr(2, 5)}`,
+        title,
+        artist,
+        artUrl: offlineArt,
+        genre: detectedGenre,
+        fileUrl: URL.createObjectURL(file), 
+        isLocal: true,
+        isLiked: false,
+      };
+
+      try {
+        await saveSongToDB(newSong, file);
+        newSongs.push(newSong);
+      } catch (e) {
+        console.error("DB Save failed", e);
+        newSongs.push(newSong);
+      }
+    }
+    setAllSongs(prev => [...prev, ...newSongs]);
+    if (newSongs.length > 0) playUiSound('success');
+  };
+
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    processFiles(event.target.files);
+  };
+
+  const handleDeleteSong = async (id: string) => {
+      try {
+          await deleteSongFromDB(id);
+          setAllSongs(prev => prev.filter(s => s.id !== id));
+          playUiSound('click');
+      } catch (e) {
+          console.error("Delete failed", e);
       }
   };
 
-  const handleLoadedMetadata = () => {
-      if (audioRef.current) {
-          setDuration(audioRef.current.duration);
-          if (isPlaying) audioRef.current.play().catch(() => setIsPlaying(false));
+  const handleToggleLike = async (id: string) => {
+      playUiSound('click');
+      const songIndex = allSongs.findIndex(s => s.id === id);
+      if (songIndex === -1) return;
+
+      const updatedSong = { ...allSongs[songIndex], isLiked: !allSongs[songIndex].isLiked };
+      const newAllSongs = [...allSongs];
+      newAllSongs[songIndex] = updatedSong;
+      setAllSongs(newAllSongs);
+      
+      if (currentSong?.id === id) {
+          setCurrentSong(updatedSong);
+      }
+
+      if (updatedSong.isLocal) {
+          await updateSongInDB(updatedSong);
       }
   };
 
-  const handleSeek = (time: number) => {
+  const handleEditSong = (song: Song) => {
+      setSongToEdit(song);
+      setIsEditModalOpen(true);
+  };
+
+  const handleSaveEdit = async (updatedSong: Song) => {
+      const newAllSongs = allSongs.map(s => s.id === updatedSong.id ? updatedSong : s);
+      setAllSongs(newAllSongs);
+      if (currentSong?.id === updatedSong.id) setCurrentSong(updatedSong);
+      
+      if (updatedSong.isLocal) {
+          await updateSongInDB(updatedSong);
+      }
+      setIsEditModalOpen(false);
+      playUiSound('success');
+  };
+
+  // --- PLAYBACK LOGIC ---
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!currentSong || !audio) return;
+
+    if (!currentSong.isRadio) {
+        fetchLyrics(currentSong.title, currentSong.artist);
+    } else {
+        setLyrics("Live Radio Station");
+    }
+
+    if (currentSong.fileUrl) {
+       if (audio.src !== currentSong.fileUrl) {
+           audio.src = currentSong.fileUrl;
+           audio.load();
+           if (isPlaying) {
+               audio.play().catch(e => { if (e.name !== 'AbortError') console.error("Autoplay prevent", e); });
+           }
+       }
+    } else {
+       // Stop audio if no valid source
+       audio.pause();
+       audio.removeAttribute('src');
+       audio.load();
+    }
+  }, [currentSong]);
+
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !currentSong?.fileUrl) return;
+    if (isPlaying && audioContextRef.current?.state === 'suspended') {
+        audioContextRef.current.resume();
+    }
+    if (isPlaying) {
+        if (audio.paused) audio.play().catch(e => { console.warn("Play prevented", e) });
+    } else {
+        if (!audio.paused) audio.pause();
+    }
+  }, [isPlaying]);
+
+  const handleVolumeChange = (vol: number) => {
       if (audioRef.current) {
-          audioRef.current.currentTime = time;
-          setCurrentTime(time);
+          audioRef.current.volume = vol;
+      }
+  };
+
+  const handleMetadataLoaded = () => {
+      if (audioRef.current) {
+          const dur = audioRef.current.duration;
+          if (!isNaN(dur) && isFinite(dur)) {
+              setDuration(dur);
+          } else {
+              setDuration(0); // Radio or stream
+          }
       }
   };
 
   const handleSongEnd = () => {
-      if (playbackMode === 'repeat_one') {
-          if (audioRef.current) {
-              audioRef.current.currentTime = 0;
-              audioRef.current.play();
-          }
-      } else {
-          playNextSong();
+       if (currentSong && currentSong.genre) {
+            setListeningHistory(h => [...h, currentSong.genre]);
+        }
+        
+        if (currentSong?.isRadio) return; // Radio shouldn't end usually
+
+        if (playbackMode === 'repeat_one') {
+            if (audioRef.current) {
+                audioRef.current.currentTime = 0;
+                audioRef.current.play();
+            }
+        } else if (playbackMode === 'repeat_list') {
+             playNext();
+        } else if (playbackMode === 'shuffle') {
+             playRandom();
+        } else {
+             setIsPlaying(false);
+             setProgress(0);
+        }
+  };
+
+  const handleAudioTimeUpdate = () => {
+      if (audioRef.current && audioRef.current.duration) {
+          setCurrentTime(audioRef.current.currentTime);
+          const p = (audioRef.current.currentTime / audioRef.current.duration) * 100;
+          setProgress(p);
       }
   };
 
-  const playNextSong = () => {
+  const handleSeek = (newTime: number) => {
+      if (audioRef.current && Number.isFinite(audioRef.current.duration)) {
+          audioRef.current.currentTime = newTime;
+          setCurrentTime(newTime);
+          setProgress((newTime / audioRef.current.duration) * 100);
+      }
+  };
+
+  const playNext = () => {
       if (!currentSong) return;
-      if (playbackMode === 'normal' && isLastSong()) return setIsPlaying(false);
-
-      let nextIndex = 0;
-      if (playbackMode === 'shuffle') {
-          nextIndex = Math.floor(Math.random() * allSongs.length);
+      // Define playlist source based on tab or just use allSongs
+      // For simplicity, using allSongs. A proper queue system would be better but simple logic:
+      const idx = allSongs.findIndex(s => s.id === currentSong.id);
+      if (idx !== -1 && idx < allSongs.length - 1) {
+          handlePlaySong(allSongs[idx + 1]);
       } else {
-          const currentIndex = allSongs.findIndex(s => s.id === currentSong.id);
-          nextIndex = (currentIndex + 1) % allSongs.length;
+          // Wrap around
+          handlePlaySong(allSongs[0]);
       }
-      handlePlaySong(allSongs[nextIndex]);
   };
 
-  const playPrevSong = () => {
+  const playPrevious = () => {
       if (!currentSong) return;
-      if (currentTime > 3) {
-          handleSeek(0);
-          return;
+      const idx = allSongs.findIndex(s => s.id === currentSong.id);
+      if (idx > 0) {
+          handlePlaySong(allSongs[idx - 1]);
+      } else {
+          handlePlaySong(allSongs[allSongs.length - 1]);
       }
-      const currentIndex = allSongs.findIndex(s => s.id === currentSong.id);
-      const prevIndex = (currentIndex - 1 + allSongs.length) % allSongs.length;
-      handlePlaySong(allSongs[prevIndex]);
   };
 
-  const isLastSong = () => {
-      if (!currentSong) return true;
-      return allSongs.findIndex(s => s.id === currentSong.id) === allSongs.length - 1;
+  const playRandom = () => {
+      const candidates = allSongs.filter(s => s.id !== currentSong?.id);
+      if (candidates.length > 0) {
+          const randomSong = candidates[Math.floor(Math.random() * candidates.length)];
+          handlePlaySong(randomSong);
+      }
+  };
+
+  const togglePlaybackMode = () => {
+      if (playbackMode === 'normal') setPlaybackMode('shuffle');
+      else if (playbackMode === 'shuffle') setPlaybackMode('repeat_list');
+      else if (playbackMode === 'repeat_list') setPlaybackMode('repeat_one');
+      else setPlaybackMode('normal');
   };
 
   const handlePlaySong = (song: Song) => {
-      // Initialize audio context on first user interaction
-      if (!audioContextRef.current) {
-          initAudioContext();
-      }
-
-      // Update Last Played
-      const updatedSong = { ...song, lastPlayed: Date.now() };
-      setAllSongs(prev => prev.map(s => s.id === song.id ? updatedSong : s));
-      if (song.isLocal) updateSongInDB(updatedSong);
-
-      if (currentSong?.id === song.id) {
-          togglePlay();
-      } else {
-          setCurrentSong(updatedSong);
-          setIsPlaying(true);
-          // Reset lyrics when song changes
-          setLyrics(song.lyrics || null);
-          // Attempt to fetch lyrics if online
-          if (!song.isLocal && !song.lyrics && !song.isRadio) {
-              fetchLyrics(song.title, song.artist, song.duration || 0);
-          }
-      }
+    playUiSound('click');
+    if (currentSong?.id === song.id) {
+      togglePlay();
+    } else {
+      setCurrentSong(song);
+      setIsPlaying(true);
+      setProgress(0);
+      setListeningHistory(prev => [...prev, song.genre]);
+    }
   };
 
-  const fetchLyrics = async (title: string, artist: string, duration: number) => {
-      try {
-        const res = await fetch(`https://lrclib.net/api/get?artist_name=${encodeURIComponent(artist)}&track_name=${encodeURIComponent(title)}`);
-        const data = await res.json();
-        if (data && data.plainLyrics) {
-             setLyrics(data.plainLyrics);
-             // Optionally save to song object if we want to persist
-        }
-      } catch (e) {
-          console.log("No lyrics found online");
-      }
+  const togglePlay = () => {
+    playUiSound('click');
+    setIsPlaying(!isPlaying);
   };
 
-  const toggleMode = () => {
-      const modes: ('normal' | 'repeat_one' | 'repeat_list' | 'shuffle')[] = ['normal', 'repeat_list', 'repeat_one', 'shuffle'];
-      const currentIdx = modes.indexOf(playbackMode);
-      setPlaybackMode(modes[(currentIdx + 1) % modes.length]);
+  const handleOpenShare = (song: Song) => {
+    playUiSound('open');
+    setSongToShare(song);
+    setIsShareModalOpen(true);
   };
 
-  const toggleLike = (id: string) => {
-      setAllSongs(prev => prev.map(s => {
-          if (s.id === id) {
-              const updated = { ...s, isLiked: !s.isLiked };
-              if (s.isLocal) updateSongInDB(updated); // Persist like
-              return updated;
-          }
-          return s;
-      }));
-      if (currentSong?.id === id) {
-          setCurrentSong(prev => prev ? { ...prev, isLiked: !prev.isLiked } : null);
-      }
+  // Drag & Drop
+  const handleDragOver = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+  };
+  const handleDragLeave = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+  };
+  const handleDrop = (e: React.DragEvent) => {
+      e.preventDefault();
+      setIsDragging(false);
+      processFiles(e.dataTransfer.files);
   };
 
-  // Sync Audio Element
-  useEffect(() => {
-      if (audioRef.current && currentSong?.fileUrl) {
-          if (audioRef.current.src !== currentSong.fileUrl) {
-              audioRef.current.src = currentSong.fileUrl;
-              audioRef.current.crossOrigin = "anonymous"; // Enable CORS for visualizer
-              audioRef.current.load();
-          }
-          if (isPlaying) {
-              const playPromise = audioRef.current.play();
-              if (playPromise !== undefined) {
-                  playPromise.catch(error => {
-                      if (error.name !== 'AbortError') console.log("Playback prevented");
-                  });
-              }
-          } else {
-              audioRef.current.pause();
-          }
-      }
-  }, [currentSong, isPlaying]);
 
-  useEffect(() => {
-      if(audioRef.current) audioRef.current.volume = volume;
-  }, [volume]);
-
-
-  // --- DRAG & DROP & UPLOAD ---
-
-  const handleDrop = async (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragOver(false);
-    if (e.dataTransfer.files) handleFiles(e.dataTransfer.files);
-  };
-
-  const handleFiles = async (files: FileList) => {
-      const newSongs: Song[] = [];
-      
-      for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          if (!file.type.startsWith('audio/')) continue;
-
-          // 1. Basic Metadata Fallback
-          let title = file.name.replace(/\.[^/.]+$/, "");
-          let artist = "Unknown Artist";
-          let artUrl = generateOfflineArt(title);
-          let lyrics = undefined;
-          let duration = 0;
-          
-          // Smart filename parsing
-          if (title.includes(' - ')) {
-              const parts = title.split(' - ');
-              artist = parts[0].trim();
-              title = parts.slice(1).join(' - ').trim();
-          }
-
-          // 2. Advanced Metadata Parsing
-          try {
-              const metadata = await mm.parseBlob(file);
-              if (metadata.common.title) title = metadata.common.title;
-              if (metadata.common.artist) artist = metadata.common.artist;
-              if (metadata.format.duration) duration = metadata.format.duration;
-              
-              if (metadata.common.picture && metadata.common.picture.length > 0) {
-                  const pic = metadata.common.picture[0];
-                  const blob = new Blob([pic.data], { type: pic.format });
-                  artUrl = URL.createObjectURL(blob);
-              }
-
-              if (metadata.common.lyrics) {
-                   lyrics = metadata.common.lyrics.join('\n');
-              }
-          } catch (e) {
-              console.warn("Metadata parsing failed, using fallback", e);
-          }
-
-          const newSong: Song = {
-              id: `local_${Date.now()}_${i}`,
-              title,
-              artist,
-              artUrl,
-              genre: 'Local',
-              fileUrl: URL.createObjectURL(file),
-              isLocal: true,
-              isLiked: false,
-              lyrics,
-              duration
-          };
-          
-          saveSongToDB(newSong, file); 
-          newSongs.push(newSong);
-      }
-      setAllSongs(prev => [...prev, ...newSongs]);
-  };
-
-  const updateSongMetadata = async (updatedSong: Song) => {
-      // 1. Update State
-      setAllSongs(prev => prev.map(s => s.id === updatedSong.id ? updatedSong : s));
-      if (currentSong?.id === updatedSong.id) setCurrentSong(updatedSong);
-      
-      // 2. Persist to DB
-      if (updatedSong.isLocal) {
-        await updateSongInDB(updatedSong);
-      }
-      setIsEditModalOpen(false);
-  };
-
-  const generateOfflineArt = (seed: string) => {
-      const colors = ['#f43f5e', '#3b82f6', '#10b981', '#f59e0b', '#8b5cf6'];
-      const color = colors[seed.length % colors.length];
-      const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="100" height="100"><rect width="100" height="100" fill="${color}"/><text x="50" y="60" font-size="50" fill="white" text-anchor="middle" font-family="sans-serif">${seed[0].toUpperCase()}</text></svg>`;
-      return `data:image/svg+xml;base64,${btoa(svg)}`;
-  };
-
-  // --- RENDER ---
   return (
     <div 
-        className={`w-full h-full bg-[#F2F2F7] dark:bg-[#0f0f12] dark:text-white transition-colors duration-300 flex flex-col md:flex-row relative ${isDragOver ? 'ring-4 ring-rose-500' : ''}`}
-        onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
-        onDragLeave={() => setIsDragOver(false)}
+        className="w-full h-full relative text-black font-sans overflow-hidden bg-[#F2F2F7] dark:bg-[#09090b] dark:text-white flex flex-col md:flex-row transition-colors duration-300"
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
         onDrop={handleDrop}
     >
+      
+      {/* Audio Element */}
       <audio 
           ref={audioRef}
-          onTimeUpdate={handleTimeUpdate}
-          onLoadedMetadata={handleLoadedMetadata}
+          crossOrigin="anonymous" 
+          onTimeUpdate={handleAudioTimeUpdate}
+          onLoadedMetadata={handleMetadataLoaded}
           onEnded={handleSongEnd}
+          onError={(e) => console.log("Audio Error (handled safely)")}
       />
 
-      <div className="hidden md:flex h-full z-30">
-        <Sidebar onToggleTheme={toggleTheme} isDarkMode={isDarkMode} />
+      {/* Drag Overlay */}
+      {isDragging && (
+          <div className="absolute inset-0 z-[100] bg-rose-500/80 backdrop-blur-sm flex flex-col items-center justify-center text-white pointer-events-none animate-fade-in">
+              <i className="fas fa-cloud-upload-alt text-6xl mb-4 animate-bounce"></i>
+              <h2 className="text-3xl font-bold">Drop Audio Files Here</h2>
+              <p>to add them to your library</p>
+          </div>
+      )}
+
+      {/* SIDEBAR */}
+      <div className="hidden md:flex h-full">
+        <Sidebar 
+          onTabChange={setActiveTab}
+          activeTab={activeTab}
+          isDarkMode={isDarkMode}
+          onToggleTheme={toggleTheme}
+        />
       </div>
 
-      <div className="flex-1 flex flex-col h-full relative overflow-hidden z-10">
-          <div className="flex-1 overflow-y-auto no-scrollbar p-4 md:p-8 pb-32">
-             <LibraryView 
+      {/* MAIN CONTENT */}
+      <div className="flex-1 flex flex-col h-full relative min-w-0 bg-white/50 dark:bg-black/20 z-0">
+          
+          <div className="blob-container opacity-50 pointer-events-none">
+              <div className="blob blob-1 mix-blend-multiply dark:mix-blend-screen opacity-70"></div>
+              <div className="blob blob-2 mix-blend-multiply dark:mix-blend-screen opacity-70"></div>
+          </div>
+
+          <div className="flex-1 overflow-y-auto no-scrollbar relative z-10 pt-4 px-4 md:pt-8 md:px-8 pb-32">
+              <LibraryView 
                 allSongs={allSongs} 
-                onPlaySong={handlePlaySong}
-                onUpload={(e) => e.target.files && handleFiles(e.target.files)}
+                radioStations={radioStations}
+                activeTab={activeTab}
                 recommendations={recommendations}
-                onToggleTheme={toggleTheme}
+                onPlaySong={handlePlaySong}
+                onUpload={handleFileUpload}
+                onDeleteSong={handleDeleteSong}
+                onShare={handleOpenShare}
+                onToggleLike={handleToggleLike}
+                onEditSong={handleEditSong}
+                onTabChange={setActiveTab}
+                currentRadioGenre={radioGenre}
+                onRadioGenreChange={setRadioGenre}
                 isDarkMode={isDarkMode}
+                onToggleTheme={toggleTheme}
+              />
+          </div>
+
+          <div className="md:hidden fixed bottom-20 left-0 w-full z-50 px-4 flex justify-center">
+             <MiniPlayer 
+                song={currentSong}
+                isPlaying={isPlaying}
+                onTogglePlay={togglePlay}
+                onClick={() => {
+                  playUiSound('open');
+                  setIsFullPlayerOpen(true);
+                }}
              />
           </div>
 
-          <div className="md:hidden fixed bottom-20 left-0 w-full z-40 px-4 flex justify-center">
-             <MiniPlayer song={currentSong} isPlaying={isPlaying} onTogglePlay={togglePlay} onClick={() => setIsFullPlayerOpen(true)} />
-          </div>
           <div className="md:hidden fixed bottom-0 w-full z-50">
              <BottomNav 
-                activeTab="All" 
-                onTabChange={() => {}} 
+                activeTab={activeTab}
+                onTabChange={setActiveTab}
              />
           </div>
+
       </div>
 
-      <div className="hidden md:block absolute bottom-0 w-full z-50">
+      <div className="hidden md:flex absolute bottom-0 w-full z-50">
         <PlayerBar 
-            song={currentSong} 
-            isPlaying={isPlaying} 
-            onTogglePlay={togglePlay} 
-            currentTime={currentTime}
-            duration={duration}
-            progress={duration ? (currentTime / duration) * 100 : 0}
-            onSeek={handleSeek}
-            playbackMode={playbackMode}
-            onToggleMode={toggleMode}
-            onOpenFullPlayer={() => setIsFullPlayerOpen(true)}
-            onVolumeChange={setVolume}
-            onToggleLike={toggleLike}
-            onNext={playNextSong}
-            onPrev={playPrevSong}
+          song={currentSong} 
+          isPlaying={isPlaying} 
+          onTogglePlay={togglePlay} 
+          progress={progress}
+          currentTime={currentTime}
+          duration={duration}
+          onSeek={handleSeek}
+          onVolumeChange={handleVolumeChange}
+          onToggleLike={handleToggleLike}
+          playbackMode={playbackMode}
+          onToggleMode={togglePlaybackMode}
+          onNext={playNext}
+          onPrev={playPrevious}
+          onOpenFullPlayer={() => {
+            playUiSound('open');
+            setIsFullPlayerOpen(true);
+          }}
         />
       </div>
 
       <FullPlayer 
           isOpen={isFullPlayerOpen}
-          onClose={() => setIsFullPlayerOpen(false)}
+          onClose={() => {
+            playUiSound('close');
+            setIsFullPlayerOpen(false);
+          }}
           song={currentSong}
           isPlaying={isPlaying}
           onTogglePlay={togglePlay}
+          onToggleLike={handleToggleLike}
+          progress={progress}
           currentTime={currentTime}
           duration={duration}
-          progress={duration ? (currentTime / duration) * 100 : 0}
           onSeek={handleSeek}
-          onEdit={() => setIsEditModalOpen(true)}
           playbackMode={playbackMode}
-          onToggleMode={toggleMode}
-          onNext={playNextSong}
-          onPrev={playPrevSong}
-          onToggleLike={toggleLike}
-          analyser={analyser}
+          onToggleMode={togglePlaybackMode}
+          onNext={playNext}
+          onPrev={playPrevious}
+          onShare={() => currentSong && handleOpenShare(currentSong)}
+          analyser={analyserRef.current}
           lyrics={lyrics}
       />
+      
+      <ShareModal 
+        isOpen={isShareModalOpen}
+        onClose={() => setIsShareModalOpen(false)}
+        song={songToShare}
+        mode="share_song"
+      />
 
-      <EditModal 
-          isOpen={isEditModalOpen} 
-          onClose={() => setIsEditModalOpen(false)} 
-          song={currentSong} 
-          onSave={updateSongMetadata} 
+      <EditModal
+        isOpen={isEditModalOpen}
+        onClose={() => setIsEditModalOpen(false)}
+        song={songToEdit}
+        onSave={handleSaveEdit}
       />
     </div>
   );

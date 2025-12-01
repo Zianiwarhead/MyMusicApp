@@ -20,14 +20,12 @@ interface FullPlayerProps {
   onPrev?: () => void;
   analyser?: AnalyserNode | null;
   lyrics?: string | null;
-  onEdit?: () => void;
 }
 
 const FullPlayer: React.FC<FullPlayerProps> = ({ 
     isOpen, onClose, song, isPlaying, onTogglePlay, progress, 
     currentTime = 0, duration = 0, onSeek,
-    onShare, onToggleLike, playbackMode, onToggleMode, onNext, onPrev, analyser, lyrics,
-    onEdit
+    onShare, onToggleLike, playbackMode, onToggleMode, onNext, onPrev, analyser, lyrics 
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const animationRef = useRef<number>(0);
@@ -117,24 +115,13 @@ const FullPlayer: React.FC<FullPlayerProps> = ({
         <i className="fas fa-chevron-down text-xl"></i>
       </button>
 
-      {/* Lyrics & Edit Toggles */}
-      <div className="absolute top-8 left-8 flex items-center gap-3 z-20">
-        <button 
-            onClick={() => setShowLyrics(!showLyrics)}
-            className={`px-4 py-2 rounded-full font-bold text-sm transition-colors ${showLyrics ? 'bg-rose-500 text-white' : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-white'}`}
-        >
-            <i className="fas fa-music mr-2"></i> Lyrics
-        </button>
-        {onEdit && (
-            <button 
-                onClick={onEdit}
-                className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-white hover:bg-gray-300 dark:hover:bg-white/20 transition-colors"
-                title="Edit Song"
-            >
-                <i className="fas fa-pen text-sm"></i>
-            </button>
-        )}
-      </div>
+      {/* Lyrics Toggle */}
+      <button 
+        onClick={() => setShowLyrics(!showLyrics)}
+        className={`absolute top-8 left-8 px-4 py-2 rounded-full font-bold text-sm transition-colors z-20 ${showLyrics ? 'bg-rose-500 text-white' : 'bg-gray-200 dark:bg-white/10 text-gray-600 dark:text-white'}`}
+      >
+        <i className="fas fa-music mr-2"></i> Lyrics
+      </button>
 
       <div className="w-full max-w-4xl flex flex-col md:flex-row items-center gap-12 px-8 relative">
           
