@@ -1,3 +1,4 @@
+
 import React, { useRef, useState } from 'react';
 import { Song } from '../types';
 
@@ -85,10 +86,10 @@ const LibraryView: React.FC<LibraryViewProps> = ({
                 <i className="fas fa-cloud-upload-alt"></i> <span>Upload</span>
              </button>
 
-             {/* Theme Toggle Button - Explicitly Rendered */}
+             {/* Theme Toggle Button - HIDDEN ON DESKTOP (md:hidden) to avoid duplicates */}
              <button 
                 onClick={onToggleTheme}
-                className="w-10 h-10 rounded-full bg-white dark:bg-white/10 text-gray-600 dark:text-white flex items-center justify-center shadow-md hover:bg-gray-100 dark:hover:bg-white/20 transition-all active:scale-95"
+                className="md:hidden w-10 h-10 rounded-full bg-white dark:bg-white/10 text-gray-600 dark:text-white flex items-center justify-center shadow-md hover:bg-gray-100 dark:hover:bg-white/20 transition-all active:scale-95"
                 title={isDarkMode ? "Switch to Light Mode" : "Switch to Dark Mode"}
             >
                 <i className={`fas ${isDarkMode ? 'fa-sun text-yellow-400' : 'fa-moon text-indigo-500'}`}></i>
